@@ -1,4 +1,10 @@
 import { 
+  users,
+  posts,
+  socialProfiles,
+  contentLibrary,
+  analytics,
+  aiGenerations,
   type User, 
   type InsertUser, 
   type SocialProfile, 
@@ -8,8 +14,13 @@ import {
   type ContentLibraryItem,
   type InsertContentLibraryItem,
   type Analytics,
-  type InsertAnalytics
+  type InsertAnalytics,
+  type AiGeneration,
+  type InsertAiGeneration
 } from "@shared/schema";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { eq, desc, and, sql } from "drizzle-orm";
+import { Pool } from "@neondatabase/serverless";
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
 
@@ -46,298 +57,159 @@ export interface IStorage {
   getAnalyticsForPost(postId: string): Promise<Analytics[]>;
   createAnalytics(analytics: InsertAnalytics): Promise<Analytics>;
   getAnalyticsByPlatform(userId: string, platform: string): Promise<Analytics[]>;
+  
+  // AI Generation methods
+  getAiGenerations(userId: string): Promise<AiGeneration[]>;
+  createAiGeneration(generation: InsertAiGeneration): Promise<AiGeneration>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User> = new Map();
-  private socialProfiles: Map<string, SocialProfile> = new Map();
-  private posts: Map<string, Post> = new Map();
-  private contentLibrary: Map<string, ContentLibraryItem> = new Map();
-  private analytics: Map<string, Analytics> = new Map();
+// Database connection
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool);
 
+export class DatabaseStorage implements IStorage {
   constructor() {
-    this.seedData();
+    console.log('Using PostgreSQL database storage');
   }
 
-  private async seedData() {
-    // Create a demo user
-    const hashedPassword = await bcrypt.hash("password123", 10);
-    const demoUser: User = {
-      id: "demo-user-id",
-      email: "demo@projectnexus.com",
-      password: hashedPassword,
-      fullName: "Demo User",
-      authProvider: "custom",
-      providerId: null,
-      createdAt: new Date(),
-    };
-    this.users.set(demoUser.id, demoUser);
-
-    // Create demo social profiles
-    const instagramProfile: SocialProfile = {
-      id: "instagram-profile",
-      userId: demoUser.id,
-      platform: "instagram",
-      username: "@brandname",
-      accessToken: "mock-instagram-token",
-      refreshToken: "mock-instagram-refresh",
-      tokenExpiresAt: new Date(Date.now() + 3600000),
-      isConnected: 1,
-      followers: 12500,
-      createdAt: new Date(),
-    };
-
-    const facebookProfile: SocialProfile = {
-      id: "facebook-profile", 
-      userId: demoUser.id,
-      platform: "facebook",
-      username: "Brand Page",
-      accessToken: "mock-facebook-token",
-      refreshToken: "mock-facebook-refresh", 
-      tokenExpiresAt: new Date(Date.now() + 3600000),
-      isConnected: 1,
-      followers: 8200,
-      createdAt: new Date(),
-    };
-
-    const twitterProfile: SocialProfile = {
-      id: "twitter-profile",
-      userId: demoUser.id,
-      platform: "twitter", 
-      username: "@company",
-      accessToken: null,
-      refreshToken: null,
-      tokenExpiresAt: null,
-      isConnected: 0,
-      followers: 5800,
-      createdAt: new Date(),
-    };
-
-    const linkedinProfile: SocialProfile = {
-      id: "linkedin-profile",
-      userId: demoUser.id,
-      platform: "linkedin",
-      username: "Company LinkedIn",
-      accessToken: "mock-linkedin-token", 
-      refreshToken: "mock-linkedin-refresh",
-      tokenExpiresAt: new Date(Date.now() + 3600000),
-      isConnected: 1,
-      followers: 6400,
-      createdAt: new Date(),
-    };
-
-    this.socialProfiles.set(instagramProfile.id, instagramProfile);
-    this.socialProfiles.set(facebookProfile.id, facebookProfile);
-    this.socialProfiles.set(twitterProfile.id, twitterProfile);
-    this.socialProfiles.set(linkedinProfile.id, linkedinProfile);
-
-    // Create demo posts
-    const publishedPost: Post = {
-      id: "published-post-1",
-      userId: demoUser.id,
-      content: "🚀 Excited to share our latest product update! New features that will revolutionize your workflow. Stay tuned for more details! #ProductUpdate #Innovation #TechNews",
-      mediaUrls: [],
-      platforms: ["instagram", "facebook", "linkedin"],
-      status: "published",
-      scheduledAt: null,
-      publishedAt: new Date(Date.now() - 7200000), // 2 hours ago
-      errorMessage: null,
-      createdAt: new Date(Date.now() - 7200000),
-    };
-
-    const scheduledPost: Post = {
-      id: "scheduled-post-1",
-      userId: demoUser.id,
-      content: "Team collaboration is the key to success! Here's how we've improved our processes to deliver better results for our clients. What strategies work best for your team? #Teamwork #Productivity #Business",
-      mediaUrls: [],
-      platforms: ["linkedin", "facebook"],
-      status: "scheduled",
-      scheduledAt: new Date(Date.now() + 86400000), // Tomorrow
-      publishedAt: null,
-      errorMessage: null,
-      createdAt: new Date(),
-    };
-
-    this.posts.set(publishedPost.id, publishedPost);
-    this.posts.set(scheduledPost.id, scheduledPost);
-
-    // Create demo analytics
-    const instagramAnalytics: Analytics = {
-      id: "analytics-1",
-      userId: demoUser.id,
-      postId: publishedPost.id,
-      platform: "instagram",
-      likes: 245,
-      comments: 18,
-      shares: 12,
-      views: 1850,
-      engagementRate: 1485, // 14.85% stored as 1485
-      recordedAt: new Date(),
-    };
-
-    const facebookAnalytics: Analytics = {
-      id: "analytics-2", 
-      userId: demoUser.id,
-      postId: publishedPost.id,
-      platform: "facebook",
-      likes: 156,
-      comments: 24,
-      shares: 8,
-      views: 1200,
-      engagementRate: 1567, // 15.67%
-      recordedAt: new Date(),
-    };
-
-    this.analytics.set(instagramAnalytics.id, instagramAnalytics);
-    this.analytics.set(facebookAnalytics.id, facebookAnalytics);
-  }
-
+  // User methods
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0] || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0] || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const hashedPassword = insertUser.password ? await bcrypt.hash(insertUser.password, 10) : null;
-    const user: User = { 
-      ...insertUser, 
-      id,
-      password: hashedPassword,
-      createdAt: new Date()
-    };
-    this.users.set(id, user);
+    const hashedPassword = insertUser.passwordHash ? await bcrypt.hash(insertUser.passwordHash, 10) : null;
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      passwordHash: hashedPassword,
+    }).returning();
     return user;
   }
 
+  // Social Profile methods
   async getSocialProfiles(userId: string): Promise<SocialProfile[]> {
-    return Array.from(this.socialProfiles.values()).filter(profile => profile.userId === userId);
+    return await db.select().from(socialProfiles).where(eq(socialProfiles.userId, userId));
   }
 
   async getSocialProfile(id: string): Promise<SocialProfile | undefined> {
-    return this.socialProfiles.get(id);
+    const result = await db.select().from(socialProfiles).where(eq(socialProfiles.id, id)).limit(1);
+    return result[0] || undefined;
   }
 
   async createSocialProfile(insertProfile: InsertSocialProfile): Promise<SocialProfile> {
-    const id = randomUUID();
-    const profile: SocialProfile = {
-      ...insertProfile,
-      id,
-      createdAt: new Date()
-    };
-    this.socialProfiles.set(id, profile);
+    const [profile] = await db.insert(socialProfiles).values(insertProfile).returning();
     return profile;
   }
 
   async updateSocialProfile(id: string, updates: Partial<SocialProfile>): Promise<SocialProfile | undefined> {
-    const existing = this.socialProfiles.get(id);
-    if (!existing) return undefined;
-
-    const updated = { ...existing, ...updates };
-    this.socialProfiles.set(id, updated);
-    return updated;
+    const result = await db.update(socialProfiles)
+      .set(updates)
+      .where(eq(socialProfiles.id, id))
+      .returning();
+    return result[0] || undefined;
   }
 
   async deleteSocialProfile(id: string): Promise<boolean> {
-    return this.socialProfiles.delete(id);
+    const result = await db.delete(socialProfiles).where(eq(socialProfiles.id, id));
+    return result.rowCount > 0;
   }
 
+  // Post methods
   async getPosts(userId: string): Promise<Post[]> {
-    return Array.from(this.posts.values()).filter(post => post.userId === userId);
+    return await db.select().from(posts).where(eq(posts.userId, userId)).orderBy(desc(posts.createdAt));
   }
 
   async getPost(id: string): Promise<Post | undefined> {
-    return this.posts.get(id);
+    const result = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
+    return result[0] || undefined;
   }
 
   async createPost(insertPost: InsertPost): Promise<Post> {
-    const id = randomUUID();
-    const post: Post = {
-      ...insertPost,
-      id,
-      publishedAt: null,
-      createdAt: new Date()
-    };
-    this.posts.set(id, post);
+    const [post] = await db.insert(posts).values(insertPost).returning();
     return post;
   }
 
   async updatePost(id: string, updates: Partial<Post>): Promise<Post | undefined> {
-    const existing = this.posts.get(id);
-    if (!existing) return undefined;
-
-    const updated = { ...existing, ...updates };
-    this.posts.set(id, updated);
-    return updated;
+    const result = await db.update(posts)
+      .set(updates)
+      .where(eq(posts.id, id))
+      .returning();
+    return result[0] || undefined;
   }
 
   async deletePost(id: string): Promise<boolean> {
-    return this.posts.delete(id);
+    const result = await db.delete(posts).where(eq(posts.id, id));
+    return result.rowCount > 0;
   }
 
   async getScheduledPosts(userId: string): Promise<Post[]> {
-    return Array.from(this.posts.values()).filter(
-      post => post.userId === userId && post.status === "scheduled"
-    );
+    return await db.select().from(posts)
+      .where(and(eq(posts.userId, userId), eq(posts.status, "scheduled")))
+      .orderBy(posts.scheduledAt);
   }
 
   async getRecentPosts(userId: string, limit = 10): Promise<Post[]> {
-    return Array.from(this.posts.values())
-      .filter(post => post.userId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, limit);
+    return await db.select().from(posts)
+      .where(eq(posts.userId, userId))
+      .orderBy(desc(posts.createdAt))
+      .limit(limit);
   }
 
+  // Content Library methods
   async getContentLibrary(userId: string): Promise<ContentLibraryItem[]> {
-    return Array.from(this.contentLibrary.values()).filter(item => item.userId === userId);
+    return await db.select().from(contentLibrary).where(eq(contentLibrary.userId, userId)).orderBy(desc(contentLibrary.createdAt));
   }
 
   async getContentLibraryItem(id: string): Promise<ContentLibraryItem | undefined> {
-    return this.contentLibrary.get(id);
+    const result = await db.select().from(contentLibrary).where(eq(contentLibrary.id, id)).limit(1);
+    return result[0] || undefined;
   }
 
   async createContentLibraryItem(insertItem: InsertContentLibraryItem): Promise<ContentLibraryItem> {
-    const id = randomUUID();
-    const item: ContentLibraryItem = {
-      ...insertItem,
-      id,
-      createdAt: new Date()
-    };
-    this.contentLibrary.set(id, item);
+    const [item] = await db.insert(contentLibrary).values(insertItem).returning();
     return item;
   }
 
   async deleteContentLibraryItem(id: string): Promise<boolean> {
-    return this.contentLibrary.delete(id);
+    const result = await db.delete(contentLibrary).where(eq(contentLibrary.id, id));
+    return result.rowCount > 0;
   }
 
+  // Analytics methods
   async getAnalytics(userId: string): Promise<Analytics[]> {
-    return Array.from(this.analytics.values()).filter(analytics => analytics.userId === userId);
+    return await db.select().from(analytics).where(eq(analytics.userId, userId)).orderBy(desc(analytics.recordedAt));
   }
 
   async getAnalyticsForPost(postId: string): Promise<Analytics[]> {
-    return Array.from(this.analytics.values()).filter(analytics => analytics.postId === postId);
+    return await db.select().from(analytics).where(eq(analytics.postId, postId));
   }
 
   async createAnalytics(insertAnalytics: InsertAnalytics): Promise<Analytics> {
-    const id = randomUUID();
-    const analytics: Analytics = {
-      ...insertAnalytics,
-      id,
-      recordedAt: new Date()
-    };
-    this.analytics.set(id, analytics);
-    return analytics;
+    const [analyticsResult] = await db.insert(analytics).values(insertAnalytics).returning();
+    return analyticsResult;
   }
 
   async getAnalyticsByPlatform(userId: string, platform: string): Promise<Analytics[]> {
-    return Array.from(this.analytics.values()).filter(
-      analytics => analytics.userId === userId && analytics.platform === platform
-    );
+    return await db.select().from(analytics)
+      .where(and(eq(analytics.userId, userId), eq(analytics.platform, platform)))
+      .orderBy(desc(analytics.recordedAt));
+  }
+
+  // AI Generation methods
+  async getAiGenerations(userId: string): Promise<AiGeneration[]> {
+    return await db.select().from(aiGenerations).where(eq(aiGenerations.userId, userId)).orderBy(desc(aiGenerations.createdAt));
+  }
+
+  async createAiGeneration(generation: InsertAiGeneration): Promise<AiGeneration> {
+    const [aiGeneration] = await db.insert(aiGenerations).values(generation).returning();
+    return aiGeneration;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

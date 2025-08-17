@@ -7,9 +7,11 @@ import {
   registerSchema, 
   loginSchema, 
   insertPostSchema, 
-  insertSocialProfileSchema 
+  insertSocialProfileSchema,
+  insertAiGenerationSchema
 } from "@shared/schema";
 import { z } from "zod";
+import * as gemini from "./gemini";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
@@ -49,7 +51,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.createUser({
         email: validatedData.email,
-        password: validatedData.password,
+        passwordHash: validatedData.password,
         fullName: validatedData.fullName,
         authProvider: "custom",
         providerId: null,
@@ -315,6 +317,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
+    }
+  });
+
+  // AI Generation endpoints
+  app.post("/api/ai/generate-content", authenticateToken, async (req: any, res) => {
+    try {
+      const { prompt } = req.body;
+      if (!prompt) {
+        return res.status(400).json({ message: "Prompt is required" });
+      }
+
+      const generatedContent = await gemini.generatePostContent(prompt);
+      
+      // Save to database
+      await storage.createAiGeneration({
+        userId: req.user.id,
+        generationType: 'content',
+        prompt,
+        generatedContent,
+        metadata: {}
+      });
+
+      res.json({ content: generatedContent });
+    } catch (error) {
+      console.error('AI content generation error:', error);
+      res.status(500).json({ message: "Failed to generate content" });
+    }
+  });
+
+  app.post("/api/ai/generate-hashtags", authenticateToken, async (req: any, res) => {
+    try {
+      const { content } = req.body;
+      if (!content) {
+        return res.status(400).json({ message: "Content is required" });
+      }
+
+      const hashtags = await gemini.generateHashtags(content);
+      
+      // Save to database
+      await storage.createAiGeneration({
+        userId: req.user.id,
+        generationType: 'hashtags',
+        prompt: content,
+        generatedContent: hashtags.join(' '),
+        metadata: { count: hashtags.length }
+      });
+
+      res.json({ hashtags });
+    } catch (error) {
+      console.error('AI hashtag generation error:', error);
+      res.status(500).json({ message: "Failed to generate hashtags" });
+    }
+  });
+
+  app.post("/api/ai/optimize-content", authenticateToken, async (req: any, res) => {
+    try {
+      const { content, platform } = req.body;
+      if (!content || !platform) {
+        return res.status(400).json({ message: "Content and platform are required" });
+      }
+
+      const optimizedContent = await gemini.optimizePostForPlatform(content, platform);
+      
+      // Save to database
+      await storage.createAiGeneration({
+        userId: req.user.id,
+        generationType: 'content',
+        prompt: `Optimize for ${platform}: ${content}`,
+        generatedContent: optimizedContent,
+        metadata: { platform }
+      });
+
+      res.json({ optimizedContent });
+    } catch (error) {
+      console.error('AI content optimization error:', error);
+      res.status(500).json({ message: "Failed to optimize content" });
+    }
+  });
+
+  app.post("/api/ai/analyze-sentiment", authenticateToken, async (req: any, res) => {
+    try {
+      const { content } = req.body;
+      if (!content) {
+        return res.status(400).json({ message: "Content is required" });
+      }
+
+      const sentiment = await gemini.analyzeContentSentiment(content);
+      
+      res.json(sentiment);
+    } catch (error) {
+      console.error('AI sentiment analysis error:', error);
+      res.status(500).json({ message: "Failed to analyze sentiment" });
+    }
+  });
+
+  app.post("/api/ai/generate-ideas", authenticateToken, async (req: any, res) => {
+    try {
+      const { topic, platform } = req.body;
+      if (!topic || !platform) {
+        return res.status(400).json({ message: "Topic and platform are required" });
+      }
+
+      const ideas = await gemini.generateContentIdeas(topic, platform);
+      
+      // Save to database
+      await storage.createAiGeneration({
+        userId: req.user.id,
+        generationType: 'content',
+        prompt: `Generate ideas for ${topic} on ${platform}`,
+        generatedContent: ideas.join('\n'),
+        metadata: { topic, platform, count: ideas.length }
+      });
+
+      res.json({ ideas });
+    } catch (error) {
+      console.error('AI idea generation error:', error);
+      res.status(500).json({ message: "Failed to generate ideas" });
+    }
+  });
+
+  app.get("/api/ai/generations", authenticateToken, async (req: any, res) => {
+    try {
+      const generations = await storage.getAiGenerations(req.user.id);
+      res.json(generations);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch AI generations" });
     }
   });
 

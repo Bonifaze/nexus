@@ -63,6 +63,16 @@ export const analytics = pgTable("analytics", {
   recordedAt: timestamp("recorded_at").defaultNow().notNull(),
 });
 
+export const aiGenerations = pgTable("ai_generations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  generationType: text("generation_type").notNull(), // 'content', 'image', 'hashtags', 'caption'
+  prompt: text("prompt").notNull(),
+  generatedContent: text("generated_content").notNull(),
+  metadata: json("metadata").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -88,6 +98,11 @@ export const insertContentLibrarySchema = createInsertSchema(contentLibrary).omi
 export const insertAnalyticsSchema = createInsertSchema(analytics).omit({
   id: true,
   recordedAt: true,
+});
+
+export const insertAiGenerationSchema = createInsertSchema(aiGenerations).omit({
+  id: true,
+  createdAt: true,
 });
 
 // Login schema
@@ -116,5 +131,7 @@ export type ContentLibraryItem = typeof contentLibrary.$inferSelect;
 export type InsertContentLibraryItem = z.infer<typeof insertContentLibrarySchema>;
 export type Analytics = typeof analytics.$inferSelect;
 export type InsertAnalytics = z.infer<typeof insertAnalyticsSchema>;
+export type AiGeneration = typeof aiGenerations.$inferSelect;
+export type InsertAiGeneration = z.infer<typeof insertAiGenerationSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
 export type RegisterData = z.infer<typeof registerSchema>;

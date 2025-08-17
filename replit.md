@@ -48,10 +48,11 @@ Preferred communication style: Simple, everyday language.
 - **Platform Integration**: Support for Instagram, Facebook, Twitter/X, and LinkedIn
 
 ### Data Storage Strategy
-- **Development**: In-memory storage implementation for rapid prototyping
-- **Production**: PostgreSQL database with connection pooling
-- **File Storage**: Asset management with CDN integration capability
+- **Database**: PostgreSQL with Drizzle ORM for type-safe operations
+- **Schema**: UUID primary keys with foreign key constraints for data integrity
+- **Compatibility**: MySQL-compatible schema design with conversion notes
 - **Caching**: React Query for client-side caching and offline support
+- **Connection**: Neon serverless PostgreSQL with connection pooling
 
 ## External Dependencies
 
