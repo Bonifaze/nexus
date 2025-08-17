@@ -1,0 +1,44 @@
+Project Nexus: Comprehensive Development Prompt & Guidelines1. Project ObjectiveThe goal is to build the "Project Nexus" platform as detailed in the proposal document. This prompt outlines the specific technical stack, architecture, and development guidelines required to complete the project. The final product should be a secure, scalable, and user-friendly web application.2. Core TechnologiesFrontend: Next.js (v14+ with App Router) & Tailwind CSSBackend: Python (v3.10+) with the FastAPI frameworkDatabase: MySQL (v8.0+)Authentication: Custom (email/password) + Social OAuth 2.0 (Google, Facebook, Instagram, TikTok)3. Environment & SetupDatabase Configuration:Host: localhostDatabase Name: nexusUser: root (or your local user)Password: (none)File Management:Any file that should not be committed to Git (e.g., .env, config.json) must have a duplicate .txt file (e.g., .env.txt, config.txt) containing its structure and placeholder values. This ensures repository clarity without exposing sensitive keys.Create a comprehensive .gitignore file for both the frontend and backend directories.4. Database Schema (MySQL)Create a SQL script named schema.sql to set up the nexus database. The schema should be well-commented and include tables for users, social profiles, posts, schedules, storefront products, brand campaigns, and more.Key Tables:users: Stores core user information.id (INT, PK, AI)email (VARCHAR, UNIQUE, NOT NULL)password_hash (VARCHAR, NULLABLE - for custom auth)full_name (VARCHAR)auth_provider (ENUM('custom', 'google', 'facebook', etc.))provider_id (VARCHAR, NULLABLE - for social auth)created_at (TIMESTAMP)social_profiles: Links social media accounts to a user.id (INT, PK, AI)user_id (FK to users.id)platform (ENUM('instagram', 'facebook', 'x', 'tiktok', 'linkedin', 'whatsapp'))username (VARCHAR)access_token (TEXT, Encrypted)refresh_token (TEXT, Encrypted)token_expires_at (TIMESTAMP)created_at (TIMESTAMP)posts: Stores the content to be published.id (INT, PK, AI)user_id (FK to users.id)content (TEXT)media_urls (JSON - to store image/video paths)created_at (TIMESTAMP)scheduled_posts: Manages the scheduling of posts.id (INT, PK, AI)post_id (FK to posts.id)profile_id (FK to social_profiles.id)scheduled_at (TIMESTAMP)status (ENUM('pending', 'published', 'failed'))error_message (TEXT, NULLABLE)(Continue to define tables for products, orders, campaigns, campaign_applications, subscriptions, etc., following this structure.)5. Backend Development (Python & FastAPI)The backend should be a RESTful API with clear, versioned endpoints (e.g., /api/v1/...).Project Structure:/backend
+|-- /app
+|   |-- /api
+|   |   |-- __init__.py
+|   |   |-- auth.py        # Authentication routes
+|   |   |-- posts.py       # Post management routes
+|   |   |-- schedule.py    # Scheduling routes
+|   |   |-- ... (other feature routes)
+|   |-- /core
+|   |   |-- config.py      # Environment variables
+|   |   |-- security.py    # Hashing, JWT, OAuth logic
+|   |-- /db
+|   |   |-- database.py    # Database connection
+|   |   |-- models.py      # SQLAlchemy models
+|   |-- /services
+|   |   |-- social_media_integrations.py # Logic for posting to APIs
+|   |-- main.py            # FastAPI app instance
+|-- requirements.txt
+|-- .env
+|-- .env.txt
+Authentication (/api/auth.py):Custom Auth:POST /register: Email/password registration with password hashing (use passlib).POST /login: Email/password login, returns a JWT.Social OAuth:GET /login/{provider}: Redirects to the provider's OAuth screen.GET /callback/{provider}: Handles the callback from the provider, creates/logs in the user, and returns a JWT.JWT: Implement JWT for session management. The token should contain user_id and an expiration date. Create middleware to protect endpoints.API Endpoints:Social Profiles: CRUD endpoints for connecting/disconnecting social media accounts. Access tokens must be encrypted in the database.Posting & Scheduling: Endpoints to create a post, schedule it for multiple platforms at specific times, and view the status of scheduled posts.Marketplace, Storefront, etc.: Create a full suite of CRUD endpoints for all features outlined in the proposal.6. Frontend Development (Next.js & Tailwind CSS)The frontend should be a Single Page Application (SPA) that communicates with the backend API.Project Structure:/frontend
+|-- /app
+|   |-- /api                 # Next.js API routes (for auth callbacks)
+|   |-- /(auth)              # Route group for auth pages
+|   |   |-- /login/page.tsx
+|   |   |-- /register/page.tsx
+|   |-- /(dashboard)         # Route group for protected pages
+|   |   |-- /dashboard/page.tsx
+|   |   |-- /schedule/page.tsx
+|   |   |-- /marketplace/page.tsx
+|   |   |-- layout.tsx       # Shared layout for dashboard
+|   |-- /components
+|   |   |-- /ui              # Reusable UI components (Button, Input, etc.)
+|   |   |-- /shared          # Navbar, Sidebar, etc.
+|   |   |-- /specific        # Components for specific features
+|   |-- /lib                 # Helper functions, API client
+|   |-- layout.tsx
+|   |-- page.tsx
+|-- /public
+|-- package.json
+|-- tailwind.config.ts
+|-- .env.local
+|-- .env.local.txt
+UI/UX:Design a clean, modern, and responsive interface using Tailwind CSS.Implement a central dashboard showing an overview of connected accounts and scheduled posts.Create an intuitive calendar interface for scheduling content.Ensure all forms have proper validation and user feedback.State Management: Use React Context or a lightweight state management library like Zustand for managing global state (e.g., user authentication status).Authentication Flow:Use a client-side API wrapper (e.g., using axios or fetch) to interact with the backend.Store the JWT securely in httpOnly cookies.Create a protected route mechanism that redirects unauthenticated users to the login page.7. Code Quality & DocumentationCommenting:Backend: Use Python docstrings for all modules, classes, and functions, explaining their purpose, arguments, and return values.Frontend: Use JSDoc comments for all React components and helper functions, explaining props and functionality.Add inline comments for complex logic, algorithms, or non-obvious code sections.Documentation:Create a README.md in the root directory.The README.md should include:A project overview.Step-by-step setup instructions for both frontend and backend.Instructions on how to run the project locally.An overview of the project structure.A summary of key API endpoints (without revealing sensitive details).This detailed prompt provides a complete blueprint for building Project Nexus. Following these guidelines will ensure a well-structured, maintainable, and robust application.
